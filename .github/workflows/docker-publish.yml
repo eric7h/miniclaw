@@ -43,6 +43,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           pull: true
           load: true
+          build-args: |
+            TOOL_REFRESH=${{ github.sha }}
           tags: miniclaw-agent:test-${{ matrix.arch }}
           cache-from: type=gha,scope=miniclaw-agent-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=miniclaw-agent-${{ matrix.arch }}

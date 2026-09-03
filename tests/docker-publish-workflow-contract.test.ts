@@ -6,7 +6,7 @@ const root = process.cwd();
 const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
 
 describe('Docker image distribution contract', () => {
-  test('builds and smokes on pinned native runners before promoting latest', () => {
+  test('builds and smokes on pinned native runners without registry credentials', () => {
     const workflow = read('.github/workflows/docker-publish.yml');
 
     expect(workflow).toContain('branches: [main]');
@@ -18,30 +18,15 @@ describe('Docker image distribution contract', () => {
     expect(workflow).toContain('context: ./container');
     expect(workflow).toContain('file: ./container/Dockerfile');
     expect(workflow).toContain('pull: true');
+    expect(workflow).toContain('load: true');
+    expect(workflow).toContain('tags: miniclaw-agent:test-${{ matrix.arch }}');
     expect(workflow).toContain(
-      'push-by-digest=true,name-canonical=true,push=true',
+      './scripts/smoke-agent-image.sh "miniclaw-agent:test-${{ matrix.arch }}" "${{ matrix.arch }}"',
     );
-    expect(workflow).toContain('TOOL_REFRESH=${{ github.sha }}');
-    expect(workflow).toContain(
-      './scripts/smoke-agent-image.sh "$IMAGE_REF" "${{ matrix.arch }}"',
-    );
-    expect(workflow).toContain(
-      '[[ "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]',
-    );
-    expect(workflow).toContain('needs: build-and-smoke');
-    expect(workflow).toContain(
-      'docker buildx imagetools create --tag "$commit_tag"',
-    );
-    expect(workflow).toContain(
-      '(($platforms | sort) == ["linux/amd64", "linux/arm64"])',
-    );
-    expect(workflow).toContain('cosign sign --yes');
-    expect(workflow).toContain('cosign verify');
-    expect(workflow).toContain('--tag "${IMAGE_NAME}:latest"');
-    expect(workflow).toContain('for attempt in {1..12}');
-    expect(workflow).toContain('if [ "$latest_digest" = "$MANIFEST_DIGEST" ]');
-    expect(workflow).toContain('username: ${{ secrets.DOCKERHUB_USERNAME }}');
-    expect(workflow).toContain('password: ${{ secrets.DOCKERHUB_TOKEN }}');
+    expect(workflow).not.toContain('push: true');
+    expect(workflow).not.toContain('docker/login-action');
+    expect(workflow).not.toContain('DOCKERHUB_USERNAME');
+    expect(workflow).not.toContain('DOCKERHUB_TOKEN');
     expect(workflow).not.toContain(`${['dckr', 'pat'].join('_')}_`);
     expect(workflow).not.toContain('docker/setup-qemu-action');
 
@@ -53,18 +38,13 @@ describe('Docker image distribution contract', () => {
       expect(action).toMatch(/^[^@\s]+@[a-f0-9]{40}$/);
     }
 
-    const smokeIndex = workflow.indexOf(
-      './scripts/smoke-agent-image.sh "$IMAGE_REF" "${{ matrix.arch }}"',
+    expect(workflow).toContain(
+      './scripts/smoke-agent-image.sh "miniclaw-agent:test-${{ matrix.arch }}" "${{ matrix.arch }}"',
     );
-    const latestIndex = workflow.indexOf('--tag "${IMAGE_NAME}:latest"');
-    expect(smokeIndex).toBeGreaterThan(-1);
-    expect(latestIndex).toBeGreaterThan(smokeIndex);
   });
 
   test('builds only in GitHub Actions and pulls published images at runtime', () => {
-    expect(read('src/config.ts')).toContain(
-      "'helsome/miniclaw-agent:latest'",
-    );
+    expect(read('src/config.ts')).toContain("'helsome/miniclaw-agent:latest'");
     const makefile = read('Makefile');
     expect(makefile).toContain(
       'CONTAINER_IMAGE ?= helsome/miniclaw-agent:latest',
